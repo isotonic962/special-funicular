@@ -55,13 +55,19 @@ class OutputTruncator:
         # Walk back from trigger
         for i in range(trigger_index, -1, -1):
             result = scan_results[i]
+            # Only stop on a real constraint
             if result["is_constraint"] and result["confidence"] >= 0.5:
                 return i
-            if vols[i] <= avg_vol and result["verb_class"] != "narration":
+
+        # No constraint found — walk back to last non-narration, non-reflection sentence
+        # with below-average volatility (but not the trigger itself)
+        for i in range(trigger_index - 1, -1, -1):
+            result = scan_results[i]
+            if result["verb_class"] not in ("narration", "reflection") and vols[i] <= avg_vol:
                 return i
 
-        # Fallback: cut at trigger point
-        return trigger_index
+        # Hard fallback: cut at trigger minus 1 to always remove something
+        return max(0, trigger_index - 1)
 
     def truncate(self, full_text, current_volatility=0.0, current_drift=0.0):
         """
@@ -86,6 +92,13 @@ class OutputTruncator:
             "scan_log": list of per-sentence scan results
         }
         """
+        # Strip markdown artifacts (bold headers, section labels)
+        clean_text = re.sub(r'\*\*[^*]+\*\*', '', full_text)
+        clean_text = re.sub(r'
+{2,}', ' ', clean_text)
+        clean_text = re.sub(r'\s{2,}', ' ', clean_text).strip()
+        full_text = clean_text
+
         sentences = self._split_sentences(full_text)
 
         if not sentences:

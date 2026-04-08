@@ -132,3 +132,5 @@ if __name__ == "__main__":
             t = result["truncation"]
             print(f"\n  [TRUNCATED] {t['sentences_kept']}/{t['sentences_total']} sentences kept")
             print(f"  [REASON] {t['termination_reason']}")
+            for i, s in enumerate(t['scan_log']):
+                print(f"  [{i}] constraint={s['is_constraint']} class={s['verb_class']} conf={s['confidence']:.1f} flags={s['flags']}")

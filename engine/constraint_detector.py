@@ -22,7 +22,7 @@ class ConstraintDetector:
             "crouched", "leaned", "reached", "gripped", "released",
             "swung", "hammered", "nailed", "sawed", "chopped",
             "slipped", "stumbled", "fell", "climbed", "stepped",
-            "walked", "ran", "moved", "shifted", "slid",
+            "walked", "ran", "moved", "shifted", "slid", "sat",
             "lit", "doused", "ate", "drank", "spat", "coughed",
             "dressed", "undressed", "washed", "wiped", "scraped",
             "folded", "unfolded", "packed", "unpacked", "locked",
@@ -114,6 +114,29 @@ class ConstraintDetector:
         if has_copula and has_finality:
             return True
 
+        # Pattern 3: em-dash followed by abstract/figurative clause
+        # "walked to the barn—a silent reminder of generations past"
+        if "—" in s or "--" in s:
+            after_dash = re.split(r"[—]|--", s)[-1].strip()
+            dash_signals = ["reminder", "testament", "symbol", "echo",
+                           "promise", "sign", "shadow", "ghost",
+                           "canvas", "mirror", "weight", "silence"]
+            if any(d in after_dash for d in dash_signals):
+                return True
+
+        # Pattern 4: participial narration — "knowing that", "offering comfort",
+        # "wanting to", "hoping to", "wishing"
+        if re.search(r"\b(knowing|realizing|offering|wanting|hoping|wishing|fearing|sensing|feeling)\b", s):
+            return True
+
+        # Pattern 5: hypothetical action — "as though to [verb]", "as if to [verb]"
+        if re.search(r"\b(as though to|as if to)\s+\w+", s):
+            return True
+
+        # Pattern 6: "a look of [X]", "with a sense of [X]", "spoke volumes"
+        if re.search(r"\b(a look of|a sense of|spoke volumes|the weight of|a reminder of|the scent of memory)\b", s):
+            return True
+
         return False
 
     def _has_emotional_labeling(self, sentence):
@@ -130,6 +153,36 @@ class ConstraintDetector:
             return True
         return False
 
+
+    def _scan_dialogue(self, sentence):
+        """Dialogue-specific gate. Returns non-constraint if dialogue is explanatory."""
+        s = sentence.lower()
+
+        # Collective framing — "we're still", "we have to", "us"
+        collective = bool(re.search(r"(we're|we are|we still|we have|we need|we can|us)", s))
+
+        # Speculative reassurance — "I guess", "probably", "maybe we"
+        speculative = bool(re.search(r"(i guess|probably|maybe we|i suppose|perhaps)", s))
+
+        # Expressive speech — character articulating interiority
+        expressive = bool(re.search(
+            r"\b(i\s+(felt|feel|knew|know|hoped|wished|promised|couldn't|can't|need to|have to)|please|don't make me|don't let me|i can't bear|forgive me)\b", s))
+
+        if collective or speculative or expressive:
+            return {
+                "is_constraint": False,
+                "verb_class": "explanatory_dialogue",
+                "confidence": 0.8,
+                "flags": [f for f, v in [
+                    ("collective_framing", collective),
+                    ("speculative_reassurance", speculative),
+                    ("expressive_speech", expressive),
+                ] if v],
+            }
+
+        # Dialogue that transmits information or creates friction — allow
+        return None  # fall through to standard scan
+
     def scan(self, sentence):
         """
         Returns classification for a single sentence.
@@ -141,6 +194,12 @@ class ConstraintDetector:
             "flags": list of triggered detectors
         }
         """
+        # Dialogue gate — check before standard scan
+        if any(q in sentence for q in ['"', chr(8220), chr(8221), chr(8216), chr(8217)]):
+            dialogue_result = self._scan_dialogue(sentence)
+            if dialogue_result is not None:
+                return dialogue_result
+
         tokens = self._tokenize(sentence)
         flags = []
 
@@ -171,12 +230,13 @@ class ConstraintDetector:
             # Narrator interpretation overrides physical verb
             # unless the physical action is the main clause
             if has_physical and not has_reflection:
+                # Physical verb tainted by narration = not a real constraint
                 # Physical verb present but tainted by narration
                 # Lower confidence constraint
                 return {
-                    "is_constraint": True,
-                    "verb_class": "physical",
-                    "confidence": 0.4,
+                    "is_constraint": False,
+                    "verb_class": "narration",
+                    "confidence": 0.6,
                     "flags": flags,
                 }
             return {
