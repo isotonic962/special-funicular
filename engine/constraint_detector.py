@@ -35,6 +35,33 @@ class ConstraintDetector:
             "signed", "handed", "sold", "paid", "received",
         }
 
+        # Present tense / gerund forms of key constraint verbs
+        self.constraint_verbs.update({
+            "turns", "stops", "sets", "stands", "crosses", "lifts",
+            "lowers", "opens", "closes", "enters", "leaves", "drops",
+            "picks", "pulls", "pushes", "cuts", "breaks", "strikes",
+            "places", "carries", "throws", "catches", "digs", "pours",
+            "drags", "loads", "unloads", "kneels", "rises",
+            "crouches", "leans", "reaches", "grips", "releases",
+            "swings", "hammers", "nails", "saws", "chops",
+            "slips", "stumbles", "falls", "climbs", "steps",
+            "walks", "runs", "moves", "shifts", "slides", "sits",
+            "lights", "eats", "drinks", "spits", "coughs",
+            "washes", "wipes", "scrapes", "folds", "unfolds",
+            "packs", "unpacks", "locks", "unlocks", "bolts",
+            "fastens", "begins", "finishes", "starts", "ends",
+            "halts", "pauses", "resumes", "continues",
+            "plows", "sows", "harvests", "reaps", "mows",
+            "buries", "fills", "covers", "lays",
+            "signs", "hands", "sells", "pays", "receives",
+            "dig", "sit", "run", "stand", "lean", "kneel",
+            "crouch", "grip", "swing", "climb", "slip",
+            "wash", "wipe", "scrape", "fold", "pack",
+            "lock", "bolt", "fasten", "plow", "sow",
+            "harvest", "reap", "mow", "bury", "fill",
+            "cover", "lay", "sign", "sell", "pay",
+        })
+
         # Environmental transition markers
         self.env_transitions = [
             "darkened", "brightened", "froze", "thawed",
@@ -52,6 +79,7 @@ class ConstraintDetector:
             "realized", "understood", "knew", "felt",
             "imagined", "wished", "hoped", "feared",
             "believed", "supposed", "considered", "reflected",
+            "knows", "feels", "sees", "senses", "wants",
             "mourned", "grieved", "longed", "missed",
         }
 
@@ -82,8 +110,40 @@ class ConstraintDetector:
     def _tokenize(self, sentence):
         return re.findall(r"\w+", sentence.lower())
 
+    def _stem(self, token):
+        """Rough stem: strip common suffixes to match past/present forms."""
+        # Try longest suffixes first
+        if token.endswith("ting") and len(token) > 5:
+            stem = token[:-4]
+            return stem + "t" if stem[-1:] != "t" else stem
+        if token.endswith("ning") and len(token) > 5:
+            stem = token[:-4]
+            return stem + "n" if stem[-1:] != "n" else stem
+        if token.endswith("ging") and len(token) > 5:
+            stem = token[:-4]
+            return stem + "g" if stem[-1:] != "g" else stem
+        if token.endswith("pping") and len(token) > 5:
+            return token[:-4]
+        if token.endswith("ing") and len(token) > 4:
+            stem = token[:-3]
+            # "digging" -> "digg" -> "dig"
+            if len(stem) > 2 and stem[-1] == stem[-2]:
+                stem = stem[:-1]
+            return stem
+        if token.endswith("ed") and len(token) > 4:
+            return token[:-2]
+        if token.endswith("ches") or token.endswith("shes") or token.endswith("sses"):
+            return token[:-2]
+        if token.endswith("es") and len(token) > 4:
+            return token[:-1]
+        if token.endswith("s") and not token.endswith("ss") and len(token) > 3:
+            return token[:-1]
+        return token
+
     def _has_constraint_verb(self, tokens):
-        return any(t in self.constraint_verbs for t in tokens)
+        stems = {self._stem(t) for t in tokens}
+        verb_stems = {self._stem(v) for v in self.constraint_verbs}
+        return bool(stems & verb_stems)
 
     def _has_env_transition(self, sentence):
         s = sentence.lower()
@@ -159,10 +219,10 @@ class ConstraintDetector:
         s = sentence.lower()
 
         # Collective framing — "we're still", "we have to", "us"
-        collective = bool(re.search(r"(we're|we are|we still|we have|we need|we can|us)", s))
+        collective = bool(re.search(r"\b(we're|we are|we still|we have|we need|we can|us)\b", s))
 
         # Speculative reassurance — "I guess", "probably", "maybe we"
-        speculative = bool(re.search(r"(i guess|probably|maybe we|i suppose|perhaps)", s))
+        speculative = bool(re.search(r"\b(i guess|probably|maybe we|i suppose|perhaps)\b", s))
 
         # Expressive speech — character articulating interiority
         expressive = bool(re.search(
@@ -246,7 +306,9 @@ class ConstraintDetector:
                 "flags": flags,
             }
 
-        if has_reflection and not has_physical:
+        if has_reflection:
+            # Reflection verb present — even with a physical verb,
+            # the sentence is serving interiority not situation change
             return {
                 "is_constraint": False,
                 "verb_class": "reflection",

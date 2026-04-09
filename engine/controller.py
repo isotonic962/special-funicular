@@ -1,10 +1,12 @@
 from .model_io import llm
 from .drift_engine import DriftEngine, LocalModelClient
 from .telemetry_logger import TelemetryLogger
+from .memory import MemoryWindow
 
 client = LocalModelClient()
 engine = DriftEngine(model_client=client)
 logger = TelemetryLogger()
+memory = MemoryWindow(size=3)
 
 def run_drift_pipeline(user_input, anchor_text):
 
@@ -18,15 +20,21 @@ def run_drift_pipeline(user_input, anchor_text):
         + anchor_text
     )
 
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_input}
-    ]
+    # 2. Build messages with conversation history
+    messages = [{"role": "system", "content": system_message}]
 
-    # 2. Run through Drift Engine
+    # Add previous exchanges from memory
+    for exchange in memory.get_texts():
+        messages.append({"role": "user", "content": exchange["user"]})
+        messages.append({"role": "assistant", "content": exchange["assistant"]})
+
+    # Add current user input
+    messages.append({"role": "user", "content": user_input})
+
+    # 3. Run through Drift Engine
     result = engine.process(user_input, messages)
 
-    # 3. Extract telemetry fields
+    # 4. Extract telemetry fields
     final_text = result["response"]
     raw_analysis = result["analysis"]
     final_drift_score = result["drift_components"]["drift_score"]
@@ -34,7 +42,10 @@ def run_drift_pipeline(user_input, anchor_text):
     current_quadrant = result["quadrant"]
     current_state = result["state"]
 
-    # 4. Log telemetry
+    # 5. Store truncated output in memory (not raw)
+    memory.add({"user": user_input, "assistant": final_text})
+
+    # 6. Log telemetry
     logger.log_event(
         prompt=user_input,
         output=final_text,
@@ -44,7 +55,5 @@ def run_drift_pipeline(user_input, anchor_text):
         mode=current_mode
     )
 
-    # 5. Return final response
+    # 7. Return final response
     return final_text
-
-

@@ -94,8 +94,7 @@ class OutputTruncator:
         """
         # Strip markdown artifacts (bold headers, section labels)
         clean_text = re.sub(r'\*\*[^*]+\*\*', '', full_text)
-        clean_text = re.sub(r'
-{2,}', ' ', clean_text)
+        clean_text = re.sub(r'\n{2,}', ' ', clean_text)
         clean_text = re.sub(r'\s{2,}', ' ', clean_text).strip()
         full_text = clean_text
 

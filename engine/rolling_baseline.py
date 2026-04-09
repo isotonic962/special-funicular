@@ -28,7 +28,7 @@ class RollingBaseline:
             },
             "default": {
                 "temperature": 0.7,
-                "repeat_penalty": 1.1
+                "repeat_penalty": 1.2
             },
             "suppress_labeling": {
                 "temperature": 0.55,

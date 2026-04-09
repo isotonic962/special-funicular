@@ -94,9 +94,15 @@ class CycleCounter:
             self.cycles_since_constraint = 0
             self.consecutive_non_constraints = 0
             self.last_constraint_index = self.sentence_count - 1
-        else:
+        elif confidence >= 0.5:
+            # High-confidence non-constraint (narration, reflection, emotional labeling)
+            # These actively count toward termination
             self.cycles_since_constraint += 1
             self.consecutive_non_constraints += 1
+        else:
+            # Low-confidence neutral — ambiguous, don't accelerate termination
+            # but don't reset the counter either
+            pass
 
         # Don't terminate before minimum length
         if self.token_count < self.min_tokens:
